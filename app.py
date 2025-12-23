@@ -5,6 +5,11 @@ import pandas as pd
 from datetime import datetime
 from groq import Groq
 
+# Replace this with your actual base64 string of the icon image (without quotes)
+ICON_BASE64 = """
+iVBORw0KGgoAAAANSUhEUgAAABkAAAAZCAYAAADE6YVjAAA... (your full base64 string here)
+"""
+
 # --- 1. CONFIGURATION ---
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
@@ -187,27 +192,29 @@ else:
         params=(st.session_state.username,)
     )
 
-    # --- Render chat with proper delete icon ---
+    # --- Render chat with custom base64 delete icon ---
     for _, row in chat_log.iterrows():
         with st.chat_message(row["role"]):
             st.write(row["content"])
 
             if row["role"] == "user":
-                # Use columns to align the delete icon to the right
-                col1, col2 = st.columns([0.95, 0.05])
-                with col2:
-                    # Small delete icon
-                    if st.button(
-                        "🗑️",
-                        key=f"del_{row['timestamp']}",
-                        help="Delete this chat message",
-                        use_container_width=False
-                    ):
-                        delete_chat_pair(
-                            st.session_state.username,
-                            row["timestamp"]
-                        )
-                        st.rerun()
+                btn_key = f"del_{row['timestamp']}"
+
+                icon_html = f"""
+                <div style="text-align: right;">
+                    <img 
+                        src="data:image/png;base64,{ICON_BASE64.strip()}"
+                        style="cursor:pointer; width:20px; height:20px;"
+                        onclick="document.getElementById('{btn_key}').click();"
+                        title="Delete this chat message"
+                    />
+                </div>
+                """
+                st.markdown(icon_html, unsafe_allow_html=True)
+
+                # Hidden button triggered by icon click
+                if st.button("", key=btn_key, on_click=delete_chat_pair, args=(st.session_state.username, row["timestamp"])):
+                    st.experimental_rerun()
 
     # --- New message ---
     if prompt := st.chat_input("What is happening?"):

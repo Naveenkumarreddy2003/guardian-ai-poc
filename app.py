@@ -10,7 +10,8 @@ from groq import Groq
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except Exception:
-    GROQ_API_KEY = "your_api_key"
+    GROQ_API_KEY = "your"   # Never hardcode secrets
+ 
 
 # --- 2. DATABASE ENGINE ---
 def init_db():

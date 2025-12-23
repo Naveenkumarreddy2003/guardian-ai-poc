@@ -1,4 +1,3 @@
-my code also should work like this code 
 
 import streamlit as st
 import sqlite3
@@ -156,4 +155,5 @@ else:
         with st.chat_message("assistant"):
             st.markdown(response)
         save_chat_to_db(st.session_state.username, "assistant", response)
+
 

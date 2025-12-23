@@ -3,7 +3,6 @@ import sqlite3
 import hashlib
 import pandas as pd
 import os
-import base64
 from datetime import datetime
 from groq import Groq
 
@@ -14,13 +13,7 @@ LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except Exception:
-    GROQ_API_KEY = "api key"  # DEV ONLY
-
-def get_base64_image(path):
-    if os.path.isfile(path):
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    return None
+    GROQ_API_KEY = None  # Do NOT hardcode secrets
 
 # ---------------- DATABASE ----------------
 def init_db():
@@ -51,7 +44,7 @@ def delete_chat_pair(username, ts_user, ts_assistant):
     conn.commit()
 
 # ---------------- AI ----------------
-def get_ai_response(user_input, history_df):
+def get_ai_response(user_input):
     client = Groq(api_key=GROQ_API_KEY)
     res = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -64,7 +57,7 @@ def get_ai_response(user_input, history_df):
     return res.choices[0].message.content
 
 # ---------------- PAGE SETUP ----------------
-st.set_page_config(page_title="Guardian AI", layout="centered")
+st.set_page_config(page_title="Guardian Crisis Interface", layout="wide")
 init_db()
 
 # ---------------- AUTH ----------------
@@ -101,7 +94,30 @@ if "logged_in" not in st.session_state:
 
 # ---------------- MAIN APP ----------------
 else:
-    logo_b64 = get_base64_image(LOGO_PATH)
+    # ---------- HEADER WITH LOGO (DEPLOYMENT SAFE) ----------
+    col1, col2, col3 = st.columns([1, 4, 1])
+
+    with col1:
+        if os.path.exists(LOGO_PATH):
+            st.image(LOGO_PATH, width=180)
+
+    with col2:
+        st.markdown(
+            """
+            <div style='text-align:center; margin-top:10px;'>
+                <h1 style='margin-bottom:0;'>Guardian Crisis Interface</h1>
+                <p style='color:gray; margin-top:4px;'>
+                    AI is actively monitoring your medication interactions based on historical data.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with col3:
+        st.empty()
+
+    st.divider()
 
     # ---------- SIDEBAR ----------
     with st.sidebar:
@@ -122,21 +138,20 @@ else:
         conn
     )
 
-    # ---------- SMALL DELETE BUTTON CSS ----------
+    # ---------- SMALL DELETE BUTTON STYLE ----------
     st.markdown(
         """
         <style>
         button[kind="secondary"] {
             padding: 0.15rem 0.35rem !important;
             font-size: 0.7rem !important;
-            min-height: unset !important;
         }
         </style>
         """,
         unsafe_allow_html=True
     )
 
-    # ---------- CHAT HISTORY (PAIR-WISE DELETE) ----------
+    # ---------- CHAT HISTORY (PAIR DELETE) ----------
     i = 0
     while i < len(chat_log):
         row = chat_log.iloc[i]
@@ -155,11 +170,7 @@ else:
                             st.write(next_row["content"])
 
                 with col_del:
-                    if st.button(
-                        "🗑",
-                        key=f"del_pair_{row['timestamp']}",
-                        help="Delete this conversation"
-                    ):
+                    if st.button("🗑", key=f"del_{row['timestamp']}"):
                         delete_chat_pair(
                             st.session_state.username,
                             row["timestamp"],
@@ -177,33 +188,10 @@ else:
             st.write(prompt)
         save_chat(st.session_state.username, "user", prompt)
 
-        with st.spinner("Analyzing medical history..."):
-            reply = get_ai_response(prompt, pd.DataFrame())
+        with st.spinner("Analyzing medical data..."):
+            reply = get_ai_response(prompt)
 
         with st.chat_message("assistant"):
             st.markdown(reply)
 
         save_chat(st.session_state.username, "assistant", reply)
-
-    # ---------- FIXED RIGHT-SIDE LOGO (RESTORED) ----------
-    if logo_b64:
-        st.markdown(
-            f"""
-            <style>
-            .fixed-footer-logo {{
-                position: fixed;
-                bottom: 605px;
-                left: 200px;
-                z-index: 999;
-                opacity: 0.9;
-                pointer-events: none;
-            }}
-            </style>
-
-            <div class="fixed-footer-logo">
-                <img src="data:image/png;base64,{logo_b64}" width="120">
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-

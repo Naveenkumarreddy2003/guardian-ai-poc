@@ -6,6 +6,7 @@ from datetime import datetime
 from groq import Groq
 import os
 import base64
+import streamlit.components.v1 as components
 
 # --- 1. CONFIGURATION ---
 try:
@@ -29,10 +30,14 @@ def init_db():
     conn = sqlite3.connect("medical_guardian.db", check_same_thread=False)
     c = conn.cursor()
     c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)")
-    c.execute("""CREATE TABLE IF NOT EXISTS medical_history
-                 (user_id TEXT, date TEXT, substance TEXT, dosage TEXT, reaction TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS chat_messages
-                 (username TEXT, role TEXT, content TEXT, timestamp DATETIME)""")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS medical_history
+        (user_id TEXT, date TEXT, substance TEXT, dosage TEXT, reaction TEXT)
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages
+        (username TEXT, role TEXT, content TEXT, timestamp DATETIME)
+    """)
     conn.commit()
     return conn
 
@@ -50,7 +55,7 @@ def load_chat_history(username, limit=50):
         """
         SELECT role, content, timestamp
         FROM chat_messages
-        WHERE username=?
+    WHERE username=?
         ORDER BY timestamp ASC
         LIMIT ?
         """,
@@ -61,20 +66,14 @@ def load_chat_history(username, limit=50):
 def delete_chat_pair(username, user_timestamp):
     conn = init_db()
     c = conn.cursor()
-    # Delete user message
     c.execute(
-        """
-        DELETE FROM chat_messages
-        WHERE username=? AND role='user' AND timestamp=?
-        """,
+        "DELETE FROM chat_messages WHERE username=? AND role='user' AND timestamp=?",
         (username, user_timestamp)
     )
-    # Delete immediate assistant response
     c.execute(
         """
         DELETE FROM chat_messages
-        WHERE username=? AND role='assistant'
-          AND timestamp > ?
+        WHERE username=? AND role='assistant' AND timestamp > ?
         ORDER BY timestamp ASC
         LIMIT 1
         """,
@@ -105,22 +104,22 @@ def seed_demo_data(username):
         )
     conn.commit()
 
-# --- 3. AI REASONING ENGINE ---
+# --- 3. AI ENGINE ---
 def get_ai_response(user_input, history_df, username):
     client = Groq(api_key=GROQ_API_KEY)
     history_context = history_df.to_string(index=False)
 
     system_msg = f"""
-You are a Medical Guardian AI. You are reading from the user's secure 2-year medical database.
+You are a Medical Guardian AI.
 
 DATABASE RECORDS FOUND:
 {history_context}
 
 INSTRUCTIONS:
-1. Read the database first.
-2. Analyze alcohol + medication interactions.
-3. Check dosage if pills are mentioned.
-4. Suggest immediate recovery steps.
+1. Read database first
+2. Analyze alcohol + medication interaction
+3. Ask dosage questions
+4. Give safety steps
 """
 
     chat_history = load_chat_history(username)
@@ -135,30 +134,30 @@ INSTRUCTIONS:
     )
     return completion.choices[0].message.content
 
-# --- 4. UI FLOW ---
+# --- 4. UI ---
 st.set_page_config(page_title="Guardian AI", layout="centered")
 init_db()
 
-# --- Render logo at top-right ---
+# --- ✅ FIXED LOGO RENDERING (IMPORTANT CHANGE) ---
 if logo_b64:
-    st.markdown(
+    components.html(
         f"""
         <style>
-        .fixed-footer-logo {{
-            position: fixed;
-            bottom: 605px;
-            left: 200px;
-            z-index: 999;
-            opacity: 0.9;
-            pointer-events: none;
+            .fixed-logo {{
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                opacity: 0.9;
+                pointer-events: none;
             }}
-            </style>
-
-            <div class="fixed-footer-logo">
-                 <img src="data:image/png;base64,{logo_b64}" width="120">
-            </div>
-            """,
-        unsafe_allow_html=True
+        </style>
+        <div class="fixed-logo">
+            <img src="data:image/png;base64,{logo_b64}" width="120"/>
+        </div>
+        """,
+        height=0,
+        width=0
     )
 
 # --- Authentication ---
@@ -170,7 +169,7 @@ if "logged_in" not in st.session_state:
         u = st.text_input("Username")
         p = st.text_input("Password", type="password")
         if st.button("Log In"):
-            hashed = hashlib.sha256(str.encode(p)).hexdigest()
+            hashed = hashlib.sha256(p.encode()).hexdigest()
             conn = init_db()
             if conn.execute(
                 "SELECT * FROM users WHERE username=? AND password=?",
@@ -186,7 +185,7 @@ if "logged_in" not in st.session_state:
         new_u = st.text_input("New Username")
         new_p = st.text_input("New Password", type="password")
         if st.button("Create Account"):
-            hashed = hashlib.sha256(str.encode(new_p)).hexdigest()
+            hashed = hashlib.sha256(new_p.encode()).hexdigest()
             conn = init_db()
             try:
                 conn.execute("INSERT INTO users VALUES (?,?)", (new_u, hashed))
@@ -223,34 +222,23 @@ else:
         params=(st.session_state.username,)
     )
 
-    # --- Render chat with delete icon ---
     for _, row in chat_log.iterrows():
         with st.chat_message(row["role"]):
             st.write(row["content"])
             if row["role"] == "user":
                 col1, col2 = st.columns([0.95, 0.05])
                 with col2:
-                    if st.button(
-                        "🗑️",
-                        key=f"del_{row['timestamp']}",
-                        help="Delete this chat message",
-                        use_container_width=False
-                    ):
+                    if st.button("🗑️", key=f"del_{row['timestamp']}"):
                         delete_chat_pair(st.session_state.username, row["timestamp"])
                         st.experimental_rerun()
 
-    # --- New message ---
     if prompt := st.chat_input("What is happening?"):
         with st.chat_message("user"):
             st.write(prompt)
         save_chat_to_db(st.session_state.username, "user", prompt)
 
         with st.spinner("Analyzing interactions..."):
-            response = get_ai_response(
-                prompt,
-                hidden_history,
-                st.session_state.username
-            )
+            response = get_ai_response(prompt, hidden_history, st.session_state.username)
 
         with st.chat_message("assistant"):
             st.markdown(response)

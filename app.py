@@ -13,13 +13,16 @@ try:
 except Exception:
     GROQ_API_KEY = ""
 
-LOGO_PATH = "logo.png"  # Path to your logo
+# --- 1a. Logo Base64 Helper ---
+LOGO_PATH = "logo.png"
 
 def get_base64_image(path):
     if os.path.isfile(path):
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode()
     return None
+
+logo_b64 = get_base64_image(LOGO_PATH)
 
 # --- 2. DATABASE ENGINE ---
 def init_db():
@@ -136,6 +139,29 @@ INSTRUCTIONS:
 st.set_page_config(page_title="Guardian AI", layout="centered")
 init_db()
 
+# --- Render logo at top-right ---
+if logo_b64:
+    st.markdown(
+        f"""
+        <style>
+        .fixed-footer-logo {{
+            position: fixed;
+            bottom: 605px;
+            left: 200px;
+            z-index: 999;
+            opacity: 0.9;
+            pointer-events: none;
+            }}
+            </style>
+
+            <div class="fixed-footer-logo">
+                 <img src="data:image/png;base64,{logo_b64}" width="120">
+            </div>
+            """,
+        unsafe_allow_html=True
+    )
+
+# --- Authentication ---
 if "logged_in" not in st.session_state:
     st.title("🛡️ Guardian AI: Secure Portal")
     tab1, tab2 = st.tabs(["Login", "Register"])
@@ -171,7 +197,14 @@ if "logged_in" not in st.session_state:
                 st.error("Username already exists.")
 
 else:
-    # --- Authenticated Users ---
+    with st.sidebar:
+        st.write(f"🔐 User: **{st.session_state.username}**")
+        if st.button("Logout"):
+            st.session_state.clear()
+            st.rerun()
+
+    st.title("Guardian Crisis Interface")
+
     conn = init_db()
     hidden_history = pd.read_sql_query(
         "SELECT * FROM medical_history WHERE user_id=?",
@@ -190,39 +223,7 @@ else:
         params=(st.session_state.username,)
     )
 
-    # --- Sidebar ---
-    with st.sidebar:
-        st.write(f"🔐 User: **{st.session_state.username}**")
-        if st.button("Logout"):
-            st.session_state.clear()
-            st.rerun()
-
-    # --- Page Title ---
-    st.title("Guardian Crisis Interface")
-
-    # --- Render logo using original shared logic ---
-    if logo_b64:
-        st.markdown(
-            f"""
-            <style>
-            .fixed-footer-logo {{
-                position: fixed;
-                bottom: 605px;
-                left: 200px;
-                z-index: 999;
-                opacity: 0.9;
-                pointer-events: none;
-            }}
-            </style>
-
-            <div class="fixed-footer-logo">
-                <img src="data:image/png;base64,{logo_b64}" width="120">
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    # --- Render chat ---
+    # --- Render chat with delete icon ---
     for _, row in chat_log.iterrows():
         with st.chat_message(row["role"]):
             st.write(row["content"])
@@ -238,7 +239,7 @@ else:
                         delete_chat_pair(st.session_state.username, row["timestamp"])
                         st.experimental_rerun()
 
-    # --- New message input ---
+    # --- New message ---
     if prompt := st.chat_input("What is happening?"):
         with st.chat_message("user"):
             st.write(prompt)

@@ -15,7 +15,7 @@ except Exception:
 
 # --- 2. DATABASE ENGINE ---
 def init_db():
-    conn = sqlite3.connect('medical_guardian.db', check_same_thread=False)
+    conn = sqlite3.connect('medical_guardian1.db', check_same_thread=False)
     c = conn.cursor()
     # Users Table
     c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)')
@@ -154,4 +154,5 @@ else:
         with st.chat_message("assistant"):
             st.markdown(response)
         save_chat_to_db(st.session_state.username, "assistant", response)
+
 

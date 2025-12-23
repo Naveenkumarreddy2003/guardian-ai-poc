@@ -5,11 +5,6 @@ import pandas as pd
 from datetime import datetime
 from groq import Groq
 
-# Base64 string for your custom trash bin icon PNG (converted from your uploaded file)
-ICON_BASE64 = """
-iVBORw0KGgoAAAANSUhEUgAAABkAAAAZCAYAAADE6YVjAAAAvklEQVRIS+2VQQrCQBCEZx6gYhZQnCFsxWcwpgrTGR0F6Klhm20yFJuwM3Yli6cV3yZAcfOT3LsPMuKnzNfIXVKh0PqoCAwGy4A0T2V5co0NRrB4gjjz1yOL+LsG1kFs4kU8A0G5BpyhwTXIaV7AzJ7Zt1LOEQEWX5BOCll5S24DSk/3SgrGl5IajpqQ0J0lfVswO/5eLImYmCmmv9CBgr3y9BAlhHcL4AHuNK7ybCcQv8AAAAASUVORK5CYII=
-"""
-
 # --- 1. CONFIGURATION ---
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
@@ -192,29 +187,27 @@ else:
         params=(st.session_state.username,)
     )
 
-    # --- Render chat with custom base64 delete icon ---
+    # --- Render chat with proper delete icon ---
     for _, row in chat_log.iterrows():
         with st.chat_message(row["role"]):
             st.write(row["content"])
 
             if row["role"] == "user":
-                btn_key = f"del_{row['timestamp']}"
-
-                icon_html = f"""
-                <div style="text-align: right;">
-                    <img 
-                        src="data:image/png;base64,{ICON_BASE64.strip()}"
-                        style="cursor:pointer; width:20px; height:20px;"
-                        onclick="document.getElementById('{btn_key}').click();"
-                        title="Delete this chat message"
-                    />
-                </div>
-                """
-                st.markdown(icon_html, unsafe_allow_html=True)
-
-                # Hidden button triggered by icon click
-                if st.button("", key=btn_key, on_click=delete_chat_pair, args=(st.session_state.username, row["timestamp"])):
-                    st.experimental_rerun()
+                # Use columns to align the delete icon to the right
+                col1, col2 = st.columns([0.95, 0.05])
+                with col2:
+                    # Small delete icon
+                    if st.button(
+                        "🗑️",
+                        key=f"del_{row['timestamp']}",
+                        help="Delete this chat message",
+                        use_container_width=False
+                    ):
+                        delete_chat_pair(
+                            st.session_state.username,
+                            row["timestamp"]
+                        )
+                        st.rerun()
 
     # --- New message ---
     if prompt := st.chat_input("What is happening?"):

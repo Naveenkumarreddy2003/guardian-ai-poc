@@ -4,46 +4,19 @@ import hashlib
 import pandas as pd
 from datetime import datetime
 from groq import Groq
-import base64  # For encoding the logo image
-
+ 
 # --- 1. CONFIGURATION ---
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except Exception:
     GROQ_API_KEY = ""
 
-# --- Logo base64 encoding ---
-def get_logo_base64():
-    with open("logo.png", "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
-
-LOGO_BASE64 = get_logo_base64()
-
-# Inject CSS + HTML for fixed logo at top-right
-logo_html = f"""
-<style>
-.logo-container {{
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    z-index: 9999;
-    width: 120px;
-}}
-.logo-container img {{
-    width: 100%;
-    height: auto;
-}}
-</style>
-<div class="logo-container">
-    <img src="data:image/png;base64,{LOGO_BASE64}" alt="Logo">
-</div>
-"""
-st.set_page_config(page_title="Guardian AI", layout="centered")
-
-# Render logo
-st.markdown(logo_html, unsafe_allow_html=True)
-
+def get_base64_image(path):
+    if os.path.isfile(path):
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return None
+ 
 # --- 2. DATABASE ENGINE ---
 def init_db():
     conn = sqlite3.connect("medical_guardian.db", check_same_thread=False)
@@ -55,7 +28,7 @@ def init_db():
                  (username TEXT, role TEXT, content TEXT, timestamp DATETIME)""")
     conn.commit()
     return conn
-
+ 
 def save_chat_to_db(username, role, content):
     conn = init_db()
     conn.execute(
@@ -63,7 +36,7 @@ def save_chat_to_db(username, role, content):
         (username, role, content, datetime.now())
     )
     conn.commit()
-
+ 
 def load_chat_history(username, limit=50):
     conn = init_db()
     rows = conn.execute(
@@ -77,7 +50,7 @@ def load_chat_history(username, limit=50):
         (username, limit)
     ).fetchall()
     return [{"role": r, "content": c, "timestamp": t} for r, c, t in rows]
-
+ 
 def delete_chat_pair(username, user_timestamp):
     conn = init_db()
     c = conn.cursor()
@@ -101,7 +74,7 @@ def delete_chat_pair(username, user_timestamp):
         (username, user_timestamp)
     )
     conn.commit()
-
+ 
 def seed_demo_data(username):
     conn = init_db()
     c = conn.cursor()
@@ -117,51 +90,52 @@ def seed_demo_data(username):
         ]
     else:
         records = [("2025-01-01", "General", "N/A", "Initial baseline")]
-
+ 
     for r in records:
         c.execute(
             "INSERT INTO medical_history VALUES (?,?,?,?,?)",
             (username, r[0], r[1], r[2], r[3])
         )
     conn.commit()
-
+ 
 # --- 3. AI REASONING ENGINE ---
 def get_ai_response(user_input, history_df, username):
     client = Groq(api_key=GROQ_API_KEY)
     history_context = history_df.to_string(index=False)
-
+ 
     system_msg = f"""
 You are a Medical Guardian AI. You are reading from the user's secure 2-year medical database.
-
+ 
 DATABASE RECORDS FOUND:
 {history_context}
-
+ 
 INSTRUCTIONS:
 1. Read the database first.
 2. Analyze alcohol + medication interactions.
 3. Check dosage if pills are mentioned.
 4. Suggest immediate recovery steps.
 """
-
+ 
     chat_history = load_chat_history(username)
     messages = [{"role": "system", "content": system_msg}]
     messages.extend(chat_history)
     messages.append({"role": "user", "content": user_input})
-
+ 
     completion = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=0.2
     )
     return completion.choices[0].message.content
-
+ 
 # --- 4. UI FLOW ---
+st.set_page_config(page_title="Guardian AI", layout="centered")
 init_db()
-
+ 
 if "logged_in" not in st.session_state:
     st.title("🛡️ Guardian AI: Secure Portal")
     tab1, tab2 = st.tabs(["Login", "Register"])
-
+ 
     with tab1:
         u = st.text_input("Username")
         p = st.text_input("Password", type="password")
@@ -177,7 +151,7 @@ if "logged_in" not in st.session_state:
                 st.rerun()
             else:
                 st.error("Invalid credentials")
-
+ 
     with tab2:
         new_u = st.text_input("New Username")
         new_p = st.text_input("New Password", type="password")
@@ -191,23 +165,24 @@ if "logged_in" not in st.session_state:
                 st.success("Account created successfully.")
             except sqlite3.IntegrityError:
                 st.error("Username already exists.")
-
+ 
 else:
+    logo_b64 = get_base64_image(LOGO_PATH)
     with st.sidebar:
         st.write(f"🔐 User: **{st.session_state.username}**")
         if st.button("Logout"):
             st.session_state.clear()
             st.rerun()
-
+ 
     st.title("Guardian Crisis Interface")
-
+ 
     conn = init_db()
     hidden_history = pd.read_sql_query(
         "SELECT * FROM medical_history WHERE user_id=?",
         conn,
         params=(st.session_state.username,)
     )
-
+ 
     chat_log = pd.read_sql_query(
         """
         SELECT role, content, timestamp
@@ -218,12 +193,12 @@ else:
         conn,
         params=(st.session_state.username,)
     )
-
+ 
     # --- Render chat with proper delete icon ---
     for _, row in chat_log.iterrows():
         with st.chat_message(row["role"]):
             st.write(row["content"])
-
+ 
             if row["role"] == "user":
                 # Use columns to align the delete icon to the right
                 col1, col2 = st.columns([0.95, 0.05])
@@ -239,22 +214,43 @@ else:
                             st.session_state.username,
                             row["timestamp"]
                         )
-                        st.experimental_rerun()
-
+                        st.rerun()
+ 
     # --- New message ---
     if prompt := st.chat_input("What is happening?"):
         with st.chat_message("user"):
             st.write(prompt)
         save_chat_to_db(st.session_state.username, "user", prompt)
-
+ 
         with st.spinner("Analyzing interactions..."):
             response = get_ai_response(
                 prompt,
                 hidden_history,
                 st.session_state.username
             )
-
+ 
         with st.chat_message("assistant"):
             st.markdown(response)
-
+ 
         save_chat_to_db(st.session_state.username, "assistant", response)
+
+ if logo_b64:
+        st.markdown(
+            f"""
+            <style>
+            .fixed-footer-logo {{
+                position: fixed;
+                bottom: 605px;
+                left: 200px;
+                z-index: 999;
+                opacity: 0.9;
+                pointer-events: none;
+            }}
+            </style>
+
+            <div class="fixed-footer-logo">
+                <img src="data:image/png;base64,{logo_b64}" width="120">
+            </div>
+            """,
+            unsafe_allow_html=True
+        )

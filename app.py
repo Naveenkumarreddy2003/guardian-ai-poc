@@ -7,23 +7,35 @@ from datetime import datetime
 from groq import Groq
 
 # ---------------- CONFIG ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+LOGO_PATH = "logo.png"  # MUST be in repo root
 
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except Exception:
-    GROQ_API_KEY = None  # Do NOT hardcode secrets
+    GROQ_API_KEY = None  # Never hardcode secrets
 
 # ---------------- DATABASE ----------------
 def init_db():
     conn = sqlite3.connect("medical_guardian.db", check_same_thread=False)
     c = conn.cursor()
     c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)")
-    c.execute("""CREATE TABLE IF NOT EXISTS medical_history
-                 (user_id TEXT, date TEXT, substance TEXT, dosage TEXT, reaction TEXT)""")
-    c.execute("""CREATE TABLE IF NOT EXISTS chat_messages
-                 (username TEXT, role TEXT, content TEXT, timestamp DATETIME)""")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS medical_history (
+            user_id TEXT,
+            date TEXT,
+            substance TEXT,
+            dosage TEXT,
+            reaction TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            username TEXT,
+            role TEXT,
+            content TEXT,
+            timestamp DATETIME
+        )
+    """)
     conn.commit()
     return conn
 
@@ -57,7 +69,7 @@ def get_ai_response(user_input):
     return res.choices[0].message.content
 
 # ---------------- PAGE SETUP ----------------
-st.set_page_config(page_title="Guardian Crisis Interface", layout="wide")
+st.set_page_config(page_title="Guardian Crisis Interface", layout="centered")
 init_db()
 
 # ---------------- AUTH ----------------
@@ -94,19 +106,19 @@ if "logged_in" not in st.session_state:
 
 # ---------------- MAIN APP ----------------
 else:
-    # ---------- HEADER WITH LOGO (DEPLOYMENT SAFE) ----------
-    col1, col2, col3 = st.columns([1, 4, 1])
+    # ---------- HEADER WITH LOGO (DEPLOYMENT SAFE, MINIMAL) ----------
+    col1, col2, col3 = st.columns([1, 3, 1])
 
     with col1:
         if os.path.exists(LOGO_PATH):
-            st.image(LOGO_PATH, width=180)
+            st.image(LOGO_PATH, width=160)
 
     with col2:
         st.markdown(
             """
-            <div style='text-align:center; margin-top:10px;'>
-                <h1 style='margin-bottom:0;'>Guardian Crisis Interface</h1>
-                <p style='color:gray; margin-top:4px;'>
+            <div style="text-align:center;">
+                <h1 style="margin-bottom:0;">Guardian Crisis Interface</h1>
+                <p style="color:gray; margin-top:4px;">
                     AI is actively monitoring your medication interactions based on historical data.
                 </p>
             </div>
@@ -129,13 +141,14 @@ else:
     # ---------- LOAD CHAT ----------
     conn = init_db()
     chat_log = pd.read_sql_query(
-        f"""
+        """
         SELECT role, content, timestamp
         FROM chat_messages
-        WHERE username='{st.session_state.username}'
+        WHERE username=?
         ORDER BY timestamp
         """,
-        conn
+        conn,
+        params=(st.session_state.username,)
     )
 
     # ---------- SMALL DELETE BUTTON STYLE ----------

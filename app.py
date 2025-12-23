@@ -31,11 +31,11 @@ def save_chat_to_db(username, role, content):
     )
     conn.commit()
 
-def load_chat_history(username, limit=20):
+def load_chat_history(username, limit=50):
     conn = init_db()
     rows = conn.execute(
         """
-        SELECT role, content
+        SELECT role, content, timestamp
         FROM chat_messages
         WHERE username=?
         ORDER BY timestamp ASC
@@ -43,12 +43,11 @@ def load_chat_history(username, limit=20):
         """,
         (username, limit)
     ).fetchall()
-    return [{"role": r, "content": c} for r, c in rows]
+    return [{"role": r, "content": c, "timestamp": t} for r, c, t in rows]
 
 def delete_chat_pair(username, user_timestamp):
     conn = init_db()
     c = conn.cursor()
-
     # Delete user message
     c.execute(
         """
@@ -57,7 +56,6 @@ def delete_chat_pair(username, user_timestamp):
         """,
         (username, user_timestamp)
     )
-
     # Delete the immediate assistant response
     c.execute(
         """
@@ -69,13 +67,11 @@ def delete_chat_pair(username, user_timestamp):
         """,
         (username, user_timestamp)
     )
-
     conn.commit()
 
 def seed_demo_data(username):
     conn = init_db()
     c = conn.cursor()
-
     if username.lower() == "user1":
         records = [
             ("2023-10-12", "Xanax (Alprazolam)", "0.5mg (Prescribed Daily)", "Anxiety management"),
@@ -115,7 +111,6 @@ INSTRUCTIONS:
 """
 
     chat_history = load_chat_history(username)
-
     messages = [{"role": "system", "content": system_msg}]
     messages.extend(chat_history)
     messages.append({"role": "user", "content": user_input})
@@ -125,7 +120,6 @@ INSTRUCTIONS:
         messages=messages,
         temperature=0.2
     )
-
     return completion.choices[0].message.content
 
 # --- 4. UI FLOW ---
@@ -193,19 +187,21 @@ else:
         params=(st.session_state.username,)
     )
 
-    # --- Render chat with small delete icon ---
+    # --- Render chat with proper delete icon ---
     for _, row in chat_log.iterrows():
         with st.chat_message(row["role"]):
             st.write(row["content"])
 
             if row["role"] == "user":
+                # Use columns to align the delete icon to the right
                 col1, col2 = st.columns([0.95, 0.05])
                 with col2:
-                    # Small subtle delete icon (just 🗑️)
+                    # Small delete icon
                     if st.button(
                         "🗑️",
                         key=f"del_{row['timestamp']}",
-                        help="Delete this message",
+                        help="Delete this chat message",
+                        use_container_width=False
                     ):
                         delete_chat_pair(
                             st.session_state.username,

@@ -5,9 +5,9 @@ import pandas as pd
 from datetime import datetime
 from groq import Groq
 
-# Replace this with your actual base64 string of the icon image (without quotes)
+# Base64 string for your custom trash bin icon PNG (converted from your uploaded file)
 ICON_BASE64 = """
-iVBORw0KGgoAAAANSUhEUgAAABkAAAAZCAYAAADE6YVjAAA... (your full base64 string here)
+iVBORw0KGgoAAAANSUhEUgAAABkAAAAZCAYAAADE6YVjAAAAvklEQVRIS+2VQQrCQBCEZx6gYhZQnCFsxWcwpgrTGR0F6Klhm20yFJuwM3Yli6cV3yZAcfOT3LsPMuKnzNfIXVKh0PqoCAwGy4A0T2V5co0NRrB4gjjz1yOL+LsG1kFs4kU8A0G5BpyhwTXIaV7AzJ7Zt1LOEQEWX5BOCll5S24DSk/3SgrGl5IajpqQ0J0lfVswO/5eLImYmCmmv9CBgr3y9BAlhHcL4AHuNK7ybCcQv8AAAAASUVORK5CYII=
 """
 
 # --- 1. CONFIGURATION ---

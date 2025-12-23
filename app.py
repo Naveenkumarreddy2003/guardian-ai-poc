@@ -4,12 +4,45 @@ import hashlib
 import pandas as pd
 from datetime import datetime
 from groq import Groq
+import base64  # For encoding the logo image
 
 # --- 1. CONFIGURATION ---
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except Exception:
     GROQ_API_KEY = ""
+
+# --- Logo base64 encoding ---
+def get_logo_base64():
+    with open("logo.png", "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+LOGO_BASE64 = get_logo_base64()
+
+# Inject CSS + HTML for fixed logo at top-right
+logo_html = f"""
+<style>
+.logo-container {{
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 9999;
+    width: 120px;
+}}
+.logo-container img {{
+    width: 100%;
+    height: auto;
+}}
+</style>
+<div class="logo-container">
+    <img src="data:image/png;base64,{LOGO_BASE64}" alt="Logo">
+</div>
+"""
+st.set_page_config(page_title="Guardian AI", layout="centered")
+
+# Render logo
+st.markdown(logo_html, unsafe_allow_html=True)
 
 # --- 2. DATABASE ENGINE ---
 def init_db():
@@ -123,7 +156,6 @@ INSTRUCTIONS:
     return completion.choices[0].message.content
 
 # --- 4. UI FLOW ---
-st.set_page_config(page_title="Guardian AI", layout="centered")
 init_db()
 
 if "logged_in" not in st.session_state:
@@ -207,7 +239,7 @@ else:
                             st.session_state.username,
                             row["timestamp"]
                         )
-                        st.rerun()
+                        st.experimental_rerun()
 
     # --- New message ---
     if prompt := st.chat_input("What is happening?"):

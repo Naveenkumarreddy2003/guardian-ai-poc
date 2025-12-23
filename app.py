@@ -14,13 +14,28 @@ LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except Exception:
-    GROQ_API_KEY = "your api key"  # DEV ONLY
+    GROQ_API_KEY = None  # Never hardcode secrets
 
 def get_base64_image(path):
     if os.path.isfile(path):
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode()
     return None
+
+# ---------------- MEDICAL GUARDRAIL ----------------
+MEDICAL_KEYWORDS = [
+    "medicine", "medication", "drug", "tablet", "dose", "dosage",
+    "overdose", "side effect", "reaction", "alcohol",
+    "pain", "fever", "anxiety", "panic", "depression",
+    "blood pressure", "bp", "diabetes", "asthma",
+    "heart", "chest pain", "breathing",
+    "xanax", "metformin", "insulin", "paracetamol",
+    "health", "illness", "symptom", "disease"
+]
+
+def is_medical_query(text: str) -> bool:
+    text = text.lower()
+    return any(keyword in text for keyword in MEDICAL_KEYWORDS)
 
 # ---------------- DATABASE ----------------
 def init_db():
@@ -51,12 +66,19 @@ def delete_chat_pair(username, ts_user, ts_assistant):
     conn.commit()
 
 # ---------------- AI ----------------
-def get_ai_response(user_input, history_df):
+def get_ai_response(user_input):
     client = Groq(api_key=GROQ_API_KEY)
     res = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
-            {"role": "system", "content": "You are a Medical Guardian AI."},
+            {
+                "role": "system",
+                "content": (
+                    "You are a strict medical assistant. "
+                    "Only answer medical or health-related questions. "
+                    "If the question is not medical, politely refuse."
+                )
+            },
             {"role": "user", "content": user_input}
         ],
         temperature=0.2
@@ -122,21 +144,7 @@ else:
         conn
     )
 
-    # ---------- SMALL DELETE BUTTON CSS ----------
-    st.markdown(
-        """
-        <style>
-        button[kind="secondary"] {
-            padding: 0.15rem 0.35rem !important;
-            font-size: 0.7rem !important;
-            min-height: unset !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # ---------- CHAT HISTORY (PAIR-WISE DELETE) ----------
+    # ---------- CHAT HISTORY ----------
     i = 0
     while i < len(chat_log):
         row = chat_log.iloc[i]
@@ -155,11 +163,7 @@ else:
                             st.write(next_row["content"])
 
                 with col_del:
-                    if st.button(
-                        "🗑",
-                        key=f"del_pair_{row['timestamp']}",
-                        help="Delete this conversation"
-                    ):
+                    if st.button("🗑", key=f"del_pair_{row['timestamp']}"):
                         delete_chat_pair(
                             st.session_state.username,
                             row["timestamp"],
@@ -171,21 +175,27 @@ else:
         else:
             i += 1
 
-    # ---------- CHAT INPUT ----------
+    # ---------- CHAT INPUT WITH GUARDRAIL ----------
     if prompt := st.chat_input("Input your concern..."):
         with st.chat_message("user"):
             st.write(prompt)
         save_chat(st.session_state.username, "user", prompt)
 
-        with st.spinner("Analyzing medical history..."):
-            reply = get_ai_response(prompt, pd.DataFrame())
+        if not is_medical_query(prompt):
+            reply = (
+                "⚠️ I am a medical assistant and can only answer "
+                "health-related or medication-related questions."
+            )
+        else:
+            with st.spinner("Analyzing medical history..."):
+                reply = get_ai_response(prompt)
 
         with st.chat_message("assistant"):
             st.markdown(reply)
 
         save_chat(st.session_state.username, "assistant", reply)
 
-    # ---------- FIXED RIGHT-SIDE LOGO (RESTORED) ----------
+    # ---------- FIXED LOGO ----------
     if logo_b64:
         st.markdown(
             f"""
@@ -206,5 +216,3 @@ else:
             """,
             unsafe_allow_html=True
         )
-
-

@@ -146,7 +146,7 @@ if logo_b64:
         <style>
         .fixed-top-right-logo {{
             position: fixed;
-            top: 10px;
+            top: 20px;
             right: 10px;
             z-index: 9999;
             width: 120px;
@@ -256,3 +256,4 @@ else:
             st.markdown(response)
 
         save_chat_to_db(st.session_state.username, "assistant", response)
+

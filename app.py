@@ -61,12 +61,12 @@ def seed_demo_data(username):
     conn = init_db()
     c = conn.cursor()
 
-    if username.lower() == "user1":
+    if username.lower() == "user@123":
         records = [
             ("2023-10-12", "Xanax (Alprazolam)", "0.5mg (Prescribed Daily)", "Anxiety management"),
             ("2024-05-20", "Alcohol + Xanax", "3 beers", "Severe panic attack, heart racing")
         ]
-    elif username.lower() == "user2":
+    elif username.lower() == "bt@123":
         records = [
             ("2023-08-15", "Metformin", "500mg (Prescribed Daily)", "Diabetes management"),
             ("2024-11-02", "Alcohol + Metformin", "2 glasses wine", "Panic, extreme nausea, cold sweats")
@@ -225,3 +225,4 @@ else:
             st.markdown(response)
 
         save_chat_to_db(st.session_state.username, "assistant", response)
+

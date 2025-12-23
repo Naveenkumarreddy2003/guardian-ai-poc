@@ -1,0 +1,3 @@
+# This prevents your local database from being uploaded to GitHub
+*.db
+.streamlit/

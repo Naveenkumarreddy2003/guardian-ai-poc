@@ -7,7 +7,10 @@ from groq import Groq
 
 # --- 1. CONFIGURATION ---
 # Replace with your actual Groq API key
-GROQ_API_KEY = "your_groq_api_key_here" 
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+except Exception:
+    GROQ_API_KEY = "your_api_key"
 
 # --- 2. DATABASE ENGINE ---
 def init_db():
@@ -150,3 +153,4 @@ else:
         with st.chat_message("assistant"):
             st.markdown(response)
         save_chat_to_db(st.session_state.username, "assistant", response)
+

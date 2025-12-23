@@ -14,7 +14,7 @@ LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except Exception:
-    GROQ_API_KEY = "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"  # DEV ONLY
+    GROQ_API_KEY = "your api key"  # DEV ONLY
 
 def get_base64_image(path):
     if os.path.isfile(path):
@@ -206,4 +206,5 @@ else:
             """,
             unsafe_allow_html=True
         )
+
 

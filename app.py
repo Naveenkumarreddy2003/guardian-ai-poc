@@ -193,18 +193,24 @@ else:
         params=(st.session_state.username,)
     )
 
-    # --- Render chat with delete buttons ---
+    # --- Render chat with small dustbin icon ---
     for _, row in chat_log.iterrows():
         with st.chat_message(row["role"]):
             st.write(row["content"])
 
             if row["role"] == "user":
-                if st.button("🗑️ Delete", key=f"del_{row['timestamp']}"):
-                    delete_chat_pair(
-                        st.session_state.username,
-                        row["timestamp"]
-                    )
-                    st.rerun()
+                col1, col2 = st.columns([0.95, 0.05])
+                with col2:
+                    if st.button(
+                        "🗑️",
+                        key=f"del_{row['timestamp']}",
+                        help="Delete this message"
+                    ):
+                        delete_chat_pair(
+                            st.session_state.username,
+                            row["timestamp"]
+                        )
+                        st.rerun()
 
     # --- New message ---
     if prompt := st.chat_input("What is happening?"):

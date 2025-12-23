@@ -9,22 +9,24 @@ from groq import Groq
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except Exception:
-    GROQ_API_KEY = ""   # Never hardcode secrets
+    GROQ_API_KEY = ""
 
 # --- 2. DATABASE ENGINE ---
 def init_db():
-    conn = sqlite3.connect('medical_guardian.db', check_same_thread=False)
+    conn = sqlite3.connect("medical_guardian.db", check_same_thread=False)
     c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)')
-    c.execute('CREATE TABLE IF NOT EXISTS medical_history (user_id TEXT, date TEXT, substance TEXT, dosage TEXT, reaction TEXT)')
-    c.execute('CREATE TABLE IF NOT EXISTS chat_messages (username TEXT, role TEXT, content TEXT, timestamp DATETIME)')
+    c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)")
+    c.execute("""CREATE TABLE IF NOT EXISTS medical_history
+                 (user_id TEXT, date TEXT, substance TEXT, dosage TEXT, reaction TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS chat_messages
+                 (username TEXT, role TEXT, content TEXT, timestamp DATETIME)""")
     conn.commit()
     return conn
 
 def save_chat_to_db(username, role, content):
     conn = init_db()
     conn.execute(
-        'INSERT INTO chat_messages VALUES (?,?,?,?)',
+        "INSERT INTO chat_messages VALUES (?,?,?,?)",
         (username, role, content, datetime.now())
     )
     conn.commit()
@@ -43,6 +45,33 @@ def load_chat_history(username, limit=20):
     ).fetchall()
     return [{"role": r, "content": c} for r, c in rows]
 
+def delete_chat_pair(username, user_timestamp):
+    conn = init_db()
+    c = conn.cursor()
+
+    # Delete user message
+    c.execute(
+        """
+        DELETE FROM chat_messages
+        WHERE username=? AND role='user' AND timestamp=?
+        """,
+        (username, user_timestamp)
+    )
+
+    # Delete the immediate assistant response
+    c.execute(
+        """
+        DELETE FROM chat_messages
+        WHERE username=? AND role='assistant'
+          AND timestamp > ?
+        ORDER BY timestamp ASC
+        LIMIT 1
+        """,
+        (username, user_timestamp)
+    )
+
+    conn.commit()
+
 def seed_demo_data(username):
     conn = init_db()
     c = conn.cursor()
@@ -60,10 +89,10 @@ def seed_demo_data(username):
     else:
         records = [("2025-01-01", "General", "N/A", "Initial baseline")]
 
-    for rec in records:
+    for r in records:
         c.execute(
             "INSERT INTO medical_history VALUES (?,?,?,?,?)",
-            (username, rec[0], rec[1], rec[2], rec[3])
+            (username, r[0], r[1], r[2], r[3])
         )
     conn.commit()
 
@@ -79,10 +108,10 @@ DATABASE RECORDS FOUND:
 {history_context}
 
 INSTRUCTIONS:
-1. READ DATABASE: Start by saying "I am accessing your encrypted medical records..."
-2. ANALYZE INTERACTIONS: If alcohol is mentioned, check medication conflicts.
-3. CHECK DOSAGE if pills are mentioned.
-4. SUGGEST immediate recovery steps.
+1. Read the database first.
+2. Analyze alcohol + medication interactions.
+3. Check dosage if pills are mentioned.
+4. Suggest immediate recovery steps.
 """
 
     chat_history = load_chat_history(username)
@@ -103,50 +132,48 @@ INSTRUCTIONS:
 st.set_page_config(page_title="Guardian AI", layout="centered")
 init_db()
 
-if 'logged_in' not in st.session_state:
+if "logged_in" not in st.session_state:
     st.title("🛡️ Guardian AI: Secure Portal")
     tab1, tab2 = st.tabs(["Login", "Register"])
 
     with tab1:
-        u = st.text_input("Username", key="login_u")
-        p = st.text_input("Password", type="password", key="login_p")
+        u = st.text_input("Username")
+        p = st.text_input("Password", type="password")
         if st.button("Log In"):
-            hashed_p = hashlib.sha256(str.encode(p)).hexdigest()
+            hashed = hashlib.sha256(str.encode(p)).hexdigest()
             conn = init_db()
             if conn.execute(
-                'SELECT * FROM users WHERE username=? AND password=?',
-                (u, hashed_p)
+                "SELECT * FROM users WHERE username=? AND password=?",
+                (u, hashed)
             ).fetchone():
                 st.session_state.logged_in = True
                 st.session_state.username = u
                 st.rerun()
             else:
-                st.error("Invalid Username or Password")
+                st.error("Invalid credentials")
 
     with tab2:
-        new_u = st.text_input("Username", key="reg_u")
-        new_p = st.text_input("Password", type="password", key="reg_p")
+        new_u = st.text_input("New Username")
+        new_p = st.text_input("New Password", type="password")
         if st.button("Create Account"):
             hashed = hashlib.sha256(str.encode(new_p)).hexdigest()
             conn = init_db()
             try:
-                conn.execute('INSERT INTO users VALUES (?,?)', (new_u, hashed))
+                conn.execute("INSERT INTO users VALUES (?,?)", (new_u, hashed))
                 conn.commit()
                 seed_demo_data(new_u)
-                st.success("Registration successful! Medical history synced.")
+                st.success("Account created successfully.")
             except sqlite3.IntegrityError:
                 st.error("Username already exists.")
 
 else:
     with st.sidebar:
-        st.write(f"🔐 Database: **{st.session_state.username}**")
+        st.write(f"🔐 User: **{st.session_state.username}**")
         if st.button("Logout"):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
+            st.session_state.clear()
             st.rerun()
 
     st.title("Guardian Crisis Interface")
-    st.caption("AI monitoring medication interactions based on historical data.")
 
     conn = init_db()
     hidden_history = pd.read_sql_query(
@@ -156,15 +183,30 @@ else:
     )
 
     chat_log = pd.read_sql_query(
-        "SELECT role, content FROM chat_messages WHERE username=? ORDER BY timestamp ASC",
+        """
+        SELECT role, content, timestamp
+        FROM chat_messages
+        WHERE username=?
+        ORDER BY timestamp ASC
+        """,
         conn,
         params=(st.session_state.username,)
     )
 
+    # --- Render chat with delete buttons ---
     for _, row in chat_log.iterrows():
         with st.chat_message(row["role"]):
             st.write(row["content"])
 
+            if row["role"] == "user":
+                if st.button("🗑️ Delete", key=f"del_{row['timestamp']}"):
+                    delete_chat_pair(
+                        st.session_state.username,
+                        row["timestamp"]
+                    )
+                    st.rerun()
+
+    # --- New message ---
     if prompt := st.chat_input("What is happening?"):
         with st.chat_message("user"):
             st.write(prompt)

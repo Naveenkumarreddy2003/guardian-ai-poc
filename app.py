@@ -17,7 +17,7 @@ except Exception:
 # FOOTER LOGO (DEPLOYMENT SAFE, FILE BASED)
 # --------------------------------------------------
 def render_footer_logo():
-    logo_path = "logo.png"  # must exist in GitHub repo
+    logo_path = "logo.png"
 
     if not os.path.exists(logo_path):
         return
@@ -84,10 +84,17 @@ def load_chat_history(username, limit=50):
 def delete_chat_pair(username, user_timestamp):
     conn = init_db()
     c = conn.cursor()
+
+    # Delete user message
     c.execute(
-        "DELETE FROM chat_messages WHERE username=? AND role='user' AND timestamp=?",
+        """
+        DELETE FROM chat_messages
+        WHERE username=? AND role='user' AND timestamp=?
+        """,
         (username, user_timestamp)
     )
+
+    # Delete immediate assistant reply
     c.execute(
         """
         DELETE FROM chat_messages
@@ -129,7 +136,7 @@ def get_ai_response(user_input, history_df, username):
     history_context = history_df.to_string(index=False)
 
     system_msg = f"""
-You are a Medical Guardian AI. You are reading from the user's secure 2-year medical database.
+You are a Medical Guardian AI.
 
 DATABASE RECORDS FOUND:
 {history_context}
@@ -156,7 +163,7 @@ INSTRUCTIONS:
 # --- 4. UI FLOW ---
 st.set_page_config(page_title="Guardian AI", layout="centered")
 init_db()
-render_footer_logo()   # ✅ LOGO ADDED (NO CORE LOGIC CHANGE)
+render_footer_logo()
 
 if "logged_in" not in st.session_state:
     st.title("🛡️ Guardian AI: Secure Portal")
@@ -219,31 +226,32 @@ else:
         params=(st.session_state.username,)
     )
 
+    # ---------- CHAT RENDER (DELETE STYLE FROM FIRST CODE) ----------
     for _, row in chat_log.iterrows():
-    if row["role"] == "user":
-        col_msg, col_del = st.columns([20, 1])
+        if row["role"] == "user":
+            col_msg, col_del = st.columns([20, 1])
 
-        with col_msg:
-            with st.chat_message("user"):
+            with col_msg:
+                with st.chat_message("user"):
+                    st.write(row["content"])
+
+            with col_del:
+                if st.button(
+                    "🗙",
+                    key=f"del_{row['timestamp']}",
+                    help="Delete chat",
+                    type="secondary"
+                ):
+                    delete_chat_pair(
+                        st.session_state.username,
+                        row["timestamp"]
+                    )
+                    st.rerun()
+        else:
+            with st.chat_message("assistant"):
                 st.write(row["content"])
 
-        with col_del:
-            if st.button(
-                "🗙",
-                key=f"del_{row['timestamp']}",
-                help="Delete chat",
-                type="secondary"
-            ):
-                delete_chat_pair(
-                    st.session_state.username,
-                    row["timestamp"]
-                )
-                st.rerun()
-    else:
-        with st.chat_message("assistant"):
-            st.write(row["content"])
-
-
+    # ---------- INPUT ----------
     if prompt := st.chat_input("What is happening?"):
         with st.chat_message("user"):
             st.write(prompt)
@@ -260,12 +268,3 @@ else:
             st.markdown(response)
 
         save_chat_to_db(st.session_state.username, "assistant", response)
-
-
-
-
-
-
-
-
-

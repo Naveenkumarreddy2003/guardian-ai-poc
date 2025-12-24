@@ -92,7 +92,7 @@ def delete_chat_pair(username, user_timestamp):
         """
         DELETE FROM chat_messages
         WHERE username=? AND role='assistant'
-        AND timestamp > ?
+        AND timestamp > ? 
         ORDER BY timestamp ASC
         LIMIT 1
         """,
@@ -224,7 +224,7 @@ else:
         """
         SELECT role, content, timestamp
         FROM chat_messages
-        WHERE username=?
+        WHERE username=? 
         ORDER BY timestamp ASC
         """,
         conn,
@@ -235,7 +235,15 @@ else:
         with st.chat_message(row["role"]):
             st.write(row["content"])
             if row["role"] == "user":
-                if st.button("🗑️", key=f"del_{row['timestamp']}"):
+                delete_button_html = f"""
+                <button title="Delete chat" class="delete-btn" id="del_{row['timestamp']}">
+                    <i class="fa fa-trash" style="font-size: 14px;"></i>
+                </button>
+                """
+                st.markdown(delete_button_html, unsafe_allow_html=True)
+
+                # Handle the delete action via JS
+                if st.button(f"Delete {row['timestamp']}", key=f"del_{row['timestamp']}"):
                     delete_chat_pair(st.session_state.username, row["timestamp"])
                     st.experimental_rerun()
 
@@ -252,3 +260,36 @@ else:
             st.markdown(response)
 
         save_chat_to_db(st.session_state.username, "assistant", response)
+
+# Add some custom CSS to make the icon appear small and with hover tooltip
+st.markdown("""
+    <style>
+        .delete-btn {
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+        .delete-btn:hover {
+            color: red;
+        }
+        .delete-btn i {
+            font-size: 16px;  /* Small icon size */
+        }
+        .delete-btn[title]:hover:after {
+            content: attr(title);
+            position: absolute;
+            background: #333;
+            color: #fff;
+            border-radius: 4px;
+            padding: 5px;
+            font-size: 12px;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            visibility: visible;
+        }
+    </style>
+""", unsafe_allow_html=True)

@@ -140,6 +140,21 @@ You are a Medical Guardian AI.
 
 DATABASE RECORDS FOUND:
 {history_context}
+GUARDRAILS (VERY IMPORTANT):
+- First, analyze the user's query.
+- If the query is NOT related to:
+  • medical conditions
+  • medications
+  • drugs, alcohol, overdose
+  • physical or mental health
+  • symptoms, reactions, dosage
+- Then DO NOT answer the question directly.
+- Instead, respond with:
+  "I am a medical assistant and can only help with health, medication, or safety-related concerns. 
+   If you are experiencing a medical issue or have questions about substances or symptoms, please let me know."
+
+- If the query IS medical or health-related:
+  • Continue normally.
 
 INSTRUCTIONS:
 1. Read the database first.
@@ -268,3 +283,4 @@ else:
             st.markdown(response)
 
         save_chat_to_db(st.session_state.username, "assistant", response)
+

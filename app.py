@@ -8,22 +8,28 @@ import base64
 from io import BytesIO
 from PIL import Image
 
-# --- 1. CONFIGURATION ---
+# --------------------------------------------------
+# CONFIG
+# --------------------------------------------------
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 
-# --- 1a. LOGO FROM SECRETS ---
+# --------------------------------------------------
+# LOGO
+# --------------------------------------------------
 def render_logo():
     if "LOGO_BASE64" in st.secrets:
         try:
             img_bytes = base64.b64decode(st.secrets["LOGO_BASE64"])
             img = Image.open(BytesIO(img_bytes))
-            col1, col2 = st.columns([8, 1])
-            with col2:
+            _, col = st.columns([8, 1])
+            with col:
                 st.image(img, width=120)
         except Exception:
             pass
 
-# --- 2. DATABASE ---
+# --------------------------------------------------
+# DATABASE
+# --------------------------------------------------
 def init_db():
     conn = sqlite3.connect("medical_guardian.db", check_same_thread=False)
     c = conn.cursor()
@@ -57,42 +63,40 @@ def init_db():
     conn.commit()
     return conn
 
-def save_chat_to_db(username, role, content):
-    conn = init_db()
-    conn.execute(
+def save_chat(username, role, content):
+    init_db().execute(
         "INSERT INTO chat_messages VALUES (?,?,?,?)",
         (username, role, content, datetime.now())
     )
-    conn.commit()
+    init_db().commit()
 
-def delete_chat_pair(username, user_timestamp):
+def delete_chat_pair(username, ts):
     conn = init_db()
     c = conn.cursor()
 
     c.execute(
         "DELETE FROM chat_messages WHERE username=? AND role='user' AND timestamp=?",
-        (username, user_timestamp)
+        (username, ts)
     )
 
-    c.execute(
-        """
+    c.execute("""
         DELETE FROM chat_messages
         WHERE username=? AND role='assistant'
         AND timestamp > ?
         ORDER BY timestamp ASC
         LIMIT 1
-        """,
-        (username, user_timestamp)
-    )
+    """, (username, ts))
 
     conn.commit()
 
-# --- 3. AI ---
-def get_ai_response(user_input, history_df, username):
+# --------------------------------------------------
+# AI
+# --------------------------------------------------
+def get_ai_response(prompt, history_df, username):
     client = Groq(api_key=GROQ_API_KEY)
     history_context = history_df.to_string(index=False)
 
-    system_msg = f"""
+    system = f"""
 You are a Medical Guardian AI.
 
 DATABASE RECORDS:
@@ -105,42 +109,44 @@ RULES:
 4. Give safety steps
 """
 
-    conn = init_db()
-    rows = conn.execute(
-        "SELECT role, content FROM chat_messages WHERE username=? ORDER BY timestamp ASC",
+    rows = init_db().execute(
+        "SELECT role, content FROM chat_messages WHERE username=? ORDER BY timestamp",
         (username,)
     ).fetchall()
 
-    messages = [{"role": "system", "content": system_msg}]
+    messages = [{"role": "system", "content": system}]
     messages.extend([{"role": r, "content": c} for r, c in rows])
-    messages.append({"role": "user", "content": user_input})
+    messages.append({"role": "user", "content": prompt})
 
-    completion = client.chat.completions.create(
+    return client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=0.2
-    )
+    ).choices[0].message.content
 
-    return completion.choices[0].message.content
-
-# --- 4. UI ---
+# --------------------------------------------------
+# UI SETUP
+# --------------------------------------------------
 st.set_page_config(page_title="Guardian AI", layout="centered")
 init_db()
 render_logo()
 
-# --- AUTH ---
+# --------------------------------------------------
+# AUTH
+# --------------------------------------------------
 if "logged_in" not in st.session_state:
     st.title("🛡️ Guardian AI: Secure Portal")
+
     tab1, tab2 = st.tabs(["Login", "Register"])
 
     with tab1:
         u = st.text_input("Username")
         p = st.text_input("Password", type="password")
+
         if st.button("Log In"):
             hashed = hashlib.sha256(p.encode()).hexdigest()
-            conn = init_db()
-            if conn.execute(
-                "SELECT * FROM users WHERE username=? AND password=?",
+            if init_db().execute(
+                "SELECT 1 FROM users WHERE username=? AND password=?",
                 (u, hashed)
             ).fetchone():
                 st.session_state.logged_in = True
@@ -150,20 +156,23 @@ if "logged_in" not in st.session_state:
                 st.error("Invalid credentials")
 
     with tab2:
-        new_u = st.text_input("New Username")
-        new_p = st.text_input("New Password", type="password")
+        nu = st.text_input("New Username")
+        np = st.text_input("New Password", type="password")
+
         if st.button("Create Account"):
-            hashed = hashlib.sha256(new_p.encode()).hexdigest()
             try:
                 init_db().execute(
-                    "INSERT INTO users VALUES (?,?)", (new_u, hashed)
+                    "INSERT INTO users VALUES (?,?)",
+                    (nu, hashlib.sha256(np.encode()).hexdigest())
                 )
                 init_db().commit()
                 st.success("Account created")
             except sqlite3.IntegrityError:
                 st.error("Username exists")
 
-# --- MAIN APP ---
+# --------------------------------------------------
+# MAIN APP
+# --------------------------------------------------
 else:
     with st.sidebar:
         st.write(f"🔐 **{st.session_state.username}**")
@@ -175,24 +184,40 @@ else:
 
     conn = init_db()
 
-    history_df = pd.read_sql_query(
+    history_df = pd.read_sql(
         "SELECT * FROM medical_history WHERE user_id=?",
         conn,
         params=(st.session_state.username,)
     )
 
-    chat_log = pd.read_sql_query(
+    chat_log = pd.read_sql(
         """
         SELECT role, content, timestamp
         FROM chat_messages
         WHERE username=?
-        ORDER BY timestamp ASC
+        ORDER BY timestamp
         """,
         conn,
         params=(st.session_state.username,)
     )
 
-    # --- CHAT RENDER ---
+    # --------------------------------------------------
+    # SMALL DELETE BUTTON STYLE
+    # --------------------------------------------------
+    st.markdown("""
+    <style>
+    button[kind="secondary"] {
+        padding: 0.15rem 0.35rem !important;
+        min-height: unset !important;
+        font-size: 0.85rem !important;
+        line-height: 1 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --------------------------------------------------
+    # CHAT RENDER
+    # --------------------------------------------------
     for _, row in chat_log.iterrows():
         if row["role"] == "user":
             col_msg, col_del = st.columns([20, 1])
@@ -203,9 +228,10 @@ else:
 
             with col_del:
                 if st.button(
-                    "🗑️",
+                    "🗙",
                     key=f"del_{row['timestamp']}",
                     help="Delete chat",
+                    type="secondary"
                 ):
                     delete_chat_pair(
                         st.session_state.username,
@@ -217,12 +243,14 @@ else:
             with st.chat_message("assistant"):
                 st.write(row["content"])
 
-    # --- INPUT ---
+    # --------------------------------------------------
+    # INPUT
+    # --------------------------------------------------
     if prompt := st.chat_input("What is happening?"):
         with st.chat_message("user"):
             st.write(prompt)
 
-        save_chat_to_db(st.session_state.username, "user", prompt)
+        save_chat(st.session_state.username, "user", prompt)
 
         with st.spinner("Analyzing interactions..."):
             response = get_ai_response(
@@ -234,4 +262,6 @@ else:
         with st.chat_message("assistant"):
             st.markdown(response)
 
-        save_chat_to_db(st.session_state.username, "assistant", response)
+        save_chat(st.session_state.username, "assistant", response)
+
+        st.rerun()   # 🔑 ensures delete button shows instantly

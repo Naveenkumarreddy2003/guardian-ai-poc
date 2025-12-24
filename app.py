@@ -130,35 +130,41 @@ def get_ai_response(user_input, history_df, username):
     client = Groq(api_key=GROQ_API_KEY)
     history_context = history_df.to_string(index=False)
 
-    # 🔒 MEDICAL GUARDRAILS (PROMPT ONLY)
     system_msg = f"""
 You are a Medical Guardian AI and STRICTLY a medical assistant.
 
 DATABASE RECORDS FOUND:
 {history_context}
 
-GUARDRAILS:
-- First analyze the user's query.
-- If the query is NOT related to medical, health, drugs, alcohol, dosage, symptoms, or safety:
-  Respond ONLY with:
-  "I am a medical assistant and can only help with health, medication, or safety-related concerns."
+GUARDRAILS (VERY IMPORTANT):
+- First, analyze the user's query.
+- If the query is NOT related to:
+  • medical conditions
+  • medications
+  • drugs, alcohol, overdose
+  • physical or mental health
+  • symptoms, reactions, dosage
+- Then DO NOT answer the question directly.
+- Instead, respond with:
+  "I am a medical assistant and can only help with health, medication, or safety-related concerns. 
+   If you are experiencing a medical issue or have questions about substances or symptoms, please let me know."
 
-MEDICAL RESPONSE RULES:
-1. Read database first.
-2. Analyze alcohol + medication interactions.
-3. Ask dosage clarification if needed.
-4. Give calm, safe guidance.
+- If the query IS medical or health-related:
+  • Continue normally.
+
+MEDICAL RULES:
+1. Read database first
+2. Analyze alcohol + medication interactions
+3. Ask dosage clarification if needed
+4. Give safe guidance
 """
 
     chat_history = load_chat_history(username)
 
     messages = [{"role": "system", "content": system_msg}]
-
-    # ✅ FIX: Strip timestamp before sending to Groq
     messages.extend(
         [{"role": m["role"], "content": m["content"]} for m in chat_history]
     )
-
     messages.append({"role": "user", "content": user_input})
 
     completion = client.chat.completions.create(
@@ -172,7 +178,6 @@ MEDICAL RESPONSE RULES:
 # --- 4. UI FLOW ---
 st.set_page_config(page_title="Guardian AI", layout="centered")
 init_db()
-render_footer_logo()
 
 if "logged_in" not in st.session_state:
     st.title("🛡️ Guardian AI: Secure Portal")
@@ -209,6 +214,8 @@ if "logged_in" not in st.session_state:
                 st.error("Username already exists.")
 
 else:
+    render_footer_logo()   # ✅ LOGO SHOWN ONLY AFTER LOGIN
+
     with st.sidebar:
         st.write(f"🔐 User: **{st.session_state.username}**")
         if st.button("Logout"):

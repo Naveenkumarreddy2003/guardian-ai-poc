@@ -85,16 +85,11 @@ def delete_chat_pair(username, user_timestamp):
     conn = init_db()
     c = conn.cursor()
 
-    # Delete user message
     c.execute(
-        """
-        DELETE FROM chat_messages
-        WHERE username=? AND role='user' AND timestamp=?
-        """,
+        "DELETE FROM chat_messages WHERE username=? AND role='user' AND timestamp=?",
         (username, user_timestamp)
     )
 
-    # Delete immediate assistant reply
     c.execute(
         """
         DELETE FROM chat_messages
@@ -135,37 +130,35 @@ def get_ai_response(user_input, history_df, username):
     client = Groq(api_key=GROQ_API_KEY)
     history_context = history_df.to_string(index=False)
 
+    # 🔒 MEDICAL GUARDRAILS (PROMPT ONLY)
     system_msg = f"""
-You are a Medical Guardian AI.
+You are a Medical Guardian AI and STRICTLY a medical assistant.
 
 DATABASE RECORDS FOUND:
 {history_context}
-GUARDRAILS (VERY IMPORTANT):
-- First, analyze the user's query.
-- If the query is NOT related to:
-  • medical conditions
-  • medications
-  • drugs, alcohol, overdose
-  • physical or mental health
-  • symptoms, reactions, dosage
-- Then DO NOT answer the question directly.
-- Instead, respond with:
-  "I am a medical assistant and can only help with health, medication, or safety-related concerns. 
-   If you are experiencing a medical issue or have questions about substances or symptoms, please let me know."
 
-- If the query IS medical or health-related:
-  • Continue normally.
+GUARDRAILS:
+- First analyze the user's query.
+- If the query is NOT related to medical, health, drugs, alcohol, dosage, symptoms, or safety:
+  Respond ONLY with:
+  "I am a medical assistant and can only help with health, medication, or safety-related concerns."
 
-INSTRUCTIONS:
-1. Read the database first.
+MEDICAL RESPONSE RULES:
+1. Read database first.
 2. Analyze alcohol + medication interactions.
-3. Check dosage if pills are mentioned.
-4. Suggest immediate recovery steps.
+3. Ask dosage clarification if needed.
+4. Give calm, safe guidance.
 """
 
     chat_history = load_chat_history(username)
+
     messages = [{"role": "system", "content": system_msg}]
-    messages.extend(chat_history)
+
+    # ✅ FIX: Strip timestamp before sending to Groq
+    messages.extend(
+        [{"role": m["role"], "content": m["content"]} for m in chat_history]
+    )
+
     messages.append({"role": "user", "content": user_input})
 
     completion = client.chat.completions.create(
@@ -173,6 +166,7 @@ INSTRUCTIONS:
         messages=messages,
         temperature=0.2
     )
+
     return completion.choices[0].message.content
 
 # --- 4. UI FLOW ---
@@ -241,7 +235,6 @@ else:
         params=(st.session_state.username,)
     )
 
-    # ---------- CHAT RENDER (DELETE STYLE FROM FIRST CODE) ----------
     for _, row in chat_log.iterrows():
         if row["role"] == "user":
             col_msg, col_del = st.columns([20, 1])
@@ -266,7 +259,6 @@ else:
             with st.chat_message("assistant"):
                 st.write(row["content"])
 
-    # ---------- INPUT ----------
     if prompt := st.chat_input("What is happening?"):
         with st.chat_message("user"):
             st.write(prompt)
@@ -283,4 +275,3 @@ else:
             st.markdown(response)
 
         save_chat_to_db(st.session_state.username, "assistant", response)
-

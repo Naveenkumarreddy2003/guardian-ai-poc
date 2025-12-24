@@ -32,7 +32,7 @@ def render_footer_logo():
             .footer-logo {{
                 position: fixed;
                 bottom: 600px;
-                left: 160px;
+                left: 190px;
                 z-index: 999;
                 opacity: 0.9;
             }}
@@ -254,6 +254,7 @@ else:
             st.markdown(response)
 
         save_chat_to_db(st.session_state.username, "assistant", response)
+
 
 
 

@@ -220,23 +220,29 @@ else:
     )
 
     for _, row in chat_log.iterrows():
-        with st.chat_message(row["role"]):
+    if row["role"] == "user":
+        col_msg, col_del = st.columns([20, 1])
+
+        with col_msg:
+            with st.chat_message("user"):
+                st.write(row["content"])
+
+        with col_del:
+            if st.button(
+                "🗙",
+                key=f"del_{row['timestamp']}",
+                help="Delete chat",
+                type="secondary"
+            ):
+                delete_chat_pair(
+                    st.session_state.username,
+                    row["timestamp"]
+                )
+                st.rerun()
+    else:
+        with st.chat_message("assistant"):
             st.write(row["content"])
 
-            if row["role"] == "user":
-                col1, col2 = st.columns([0.95, 0.05])
-                with col2:
-                    if st.button(
-                        "🗑️",
-                        key=f"del_{row['timestamp']}",
-                        help="Delete this chat message",
-                        use_container_width=False
-                    ):
-                        delete_chat_pair(
-                            st.session_state.username,
-                            row["timestamp"]
-                        )
-                        st.rerun()
 
     if prompt := st.chat_input("What is happening?"):
         with st.chat_message("user"):
@@ -254,6 +260,7 @@ else:
             st.markdown(response)
 
         save_chat_to_db(st.session_state.username, "assistant", response)
+
 
 
 
